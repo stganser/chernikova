@@ -1,13 +1,61 @@
 package org.exastencils.schedopt.chernikova
 
-import Chernikova.V
+import java.net.URL
 
 import isl.Conversions._
-import isl.Isl
 
 object Main {
+
+  private var loaded: Boolean = false
+  def load() : Unit = {
+
+    if (loaded)
+      return
+
+    val system: String =
+      System.getProperty("os.name") match {
+        case x if (x.startsWith("Windows")) => "win32"
+        case x if (x.startsWith("Linux"))   => "linux"
+        case x if (x.startsWith("Mac"))     => "darwin"
+        case x if (x.startsWith("Darwin"))  => "darwin"
+        case x =>
+          throw new Exception("unknown operating system (" + x + "), cannot load native library isl")
+      }
+    val arch: String =
+      System.getProperty("os.arch") match {
+        case "amd64"     => "x86_64"
+        case "x86_64"    => "x86_64"
+        case "i386"      => "x86"
+        case "powerpc64" => "ppc64"
+        case x =>
+          throw new Exception("unknown system architecture (" + x + "), cannot load native library isl")
+      }
+
+    val ldir: String = system + '-' + arch
+    val lname: String = System.mapLibraryName("isl_jni")
+    val lurl: URL = ClassLoader.getSystemResource(ldir + '/' + lname)
+    if (lurl == null)
+      throw new Error("unable to locate native library " + ldir + '/' + lname)
+
+    lurl.getProtocol() match {
+      case "file" =>
+        val lfile: String = lurl.getPath()
+        val lpath: String = lfile.substring(0, lfile.lastIndexOf('/'))
+        isl.Init.loadNative(lpath)
+
+      case "jar" =>
+        throw new Error("extracting native library from a jar file is not supported for this test")
+    }
+
+    loaded = true
+  }
+
+  final lazy val ctx = {
+    this.load()
+    isl.Ctx.alloc()
+  }
+
   def main(args: Array[String]): Unit = {
-    val ctx: isl.Ctx = Isl.ctx
     val s: isl.Set =
       if (args.length > 0) isl.Set.readFromStr(ctx, args(0))
       else isl.Set.readFromStr(ctx, "[n] -> { [i] : 5 <= i <= n and i <= 50; [i] : 100 <= i <= 200 }")
